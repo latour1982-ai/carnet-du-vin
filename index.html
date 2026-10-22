@@ -686,7 +686,7 @@ function newCode(color) {
   const A = 'ACDEFHJKLMNPRTUVWXY34679', all = allWines();
   for (;;) { let c = (color === 'r' ? 'R' : 'W') + '-'; for (let i = 0; i < 4; i++) c += A[Math.floor(Math.random() * A.length)]; if (!all.some(w => w.code === c)) return c; }
 }
-const modelStat = w => S.drafting[w.id] ? 'AIが下書き中…' : !hasModel(w) ? '模範解答 未作成' : (w.mine && w.model.source === 'ai-auto') ? '模範解答 AI下書き（未確認）' : '模範解答あり';
+const modelStat = w => S.drafting[w.id] ? 'AIが調べて下書き中…' : !hasModel(w) ? '模範解答 未作成' : (w.mine && w.model.source === 'ai-auto') ? '模範解答 AI下書き（未確認）' : '模範解答あり';
 
 /* ワインリスト */
 const WL_DEF = { color: '', src: '', model: '' };
@@ -770,7 +770,7 @@ function labelHTML(v) {
     ${n ? `<p class="hint" style="margin:6px 0 0">${n}枚読み取り済み <button type="button" class="link" data-act="lblReset">写真をすべて外す</button></p>` : ''}
     <div class="aistatus" id="lbl-status"></div>
     <p class="gnote">ボタンを押すと「写真ライブラリ」「写真を撮る」などの選択肢が出ます。アプリ内ブラウザで「写真を撮る」を選ぶとアプリが終了する場合は、先に標準のカメラで撮影して「写真ライブラリ」から選ぶか、SafariやChromeで開いてください。</p>
-    <p class="gnote">AIはインターネットを検索するわけではなく、ラベルの記載とAIがもともと持っている知識で補います。あまり知られていないワインでは、補足が不正確だったり、品種や産地の一般的な特徴だけになったりします。商品ページがあれば、本文を下の「商品ページから読み取る」に貼り付けると精度が上がります。</p>
+    <p class="gnote">ラベルの読み取りでは、ラベルの記載とAIがもともと持っている知識で補います（登録後、模範解答を作るときにWeb検索で詳しく調べます）。あまり知られていないワインでは、補足が不正確だったり、品種や産地の一般的な特徴だけになったりします。商品ページがあれば、本文を下の「商品ページから読み取る」に貼り付けると精度が上がります。</p>
   </div></section>`;
 }
 function lblRerender() { const box = $('.labelcap'); if (box) box.outerHTML = labelHTML(); }
@@ -857,7 +857,13 @@ function viewWineEdit(v) {
   <h2>${w ? `ワインを編集 <span class="code">${h(w.code)}</span>` : 'ワインを登録'}</h2>
   <p class="hint">この画面には銘柄が表示されます。ブラインドで練習する人には見せないでください。登録したワインはこのブラウザにだけ保存されます。${!w && S.sample ? '登録すると、AIが模範解答の下書きを自動で作ります。' : ''}</p>
   ${labelHTML(v)}
-  ${S.sample ? `<section class="sec"><h3>商品ページから読み取る</h3>
+  ${S.sample ? `<section class="sec"><h3>商品ページのURLから読み取る</h3>
+    <div style="padding:8px 0 16px">
+      <p class="hint">エノテカなどの商品ページや生産者のページのURLを貼り付けると、AI（Gemini）がページを開いて銘柄・生産者・品種などを読み取り、下の入力欄と参考情報に反映します。ページによっては開けないことがあり、その場合はWeb検索で補います。</p>
+      <div class="opencode" style="margin:8px 0 0;max-width:none"><input id="imp-url" type="url" inputmode="url" placeholder="https://" autocomplete="off"><button class="btn ghost" data-act="importUrl">読み取る</button></div>
+      <div class="aistatus" id="url-status"></div>
+    </div></section>` : ''}
+  ${S.sample ? `<section class="sec"><h3>商品ページの本文から読み取る</h3>
     <div style="padding:8px 0 16px">
       <p class="hint">商品ページの本文をコピーして貼り付けるか${S.imgOK ? '、ページのスクリーンショットを選ぶ' : ''}と、AIが銘柄や品種を読み取って下の入力欄に反映します。</p>
       <textarea id="imp-text" placeholder="商品ページの本文を貼り付け" style="min-height:110px"></textarea>
@@ -879,6 +885,7 @@ function viewWineEdit(v) {
       ${f('price', '購入価格（円）', d.price, 'inputmode="numeric"')}
       ${f('shop', '購入店', d.shop)}
       ${f('purchased', '購入日', d.purchased, 'type="date"')}
+      <div class="full">${f('url', '商品ページのURL（登録すると、模範解答を作るときにAIが参照します）', d.url, 'type="url" inputmode="url" placeholder="https://"')}</div>
       <label class="check" style="align-self:end;padding-bottom:8px"><input type="checkbox" id="we-vial"${d.avail !== false ? ' checked' : ''}>在庫あり</label>
       <label class="full"><span>メモ</span><textarea id="we-memo">${h(d.memo || '')}</textarea></label>
       <label class="full"><span>参考情報（模範解答のAI下書きに使われます）</span><textarea id="we-reference">${h(d.reference || '')}</textarea></label>
@@ -902,7 +909,8 @@ function viewModel(v) {
     <div style="padding:8px 0 16px">
       <p class="hint">生産者のテクニカルシートや商品ページの紹介文などを貼り付けると、下書きの精度が上がります。AIの下書きは誤りを含むことがあるので、確認してから保存してください。</p>
       <textarea id="m-ref" placeholder="参考情報を貼り付け（任意）" style="min-height:120px">${h(w.reference || '')}</textarea>
-      <div style="margin-top:10px"><button class="btn ghost" data-act="aiDraft" data-id="${w.id}"${S.sample ? '' : ' disabled'}>AIで下書きを作る</button></div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="m-web"${hasWebRef(w.reference) ? '' : ' checked'}>先にWebで調べて参考情報に加える（銘柄・生産者・収穫年で検索します）</label>
+      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn ghost" data-act="aiDraft" data-id="${w.id}"${S.sample ? '' : ' disabled'}>AIで下書きを作る</button><button class="btn ghost" data-act="webRef" data-id="${w.id}"${S.sample ? '' : ' disabled'}>Webで調べるだけ</button></div>
       <div class="aistatus" id="ai-status">${S.sample ? '' : '「AI設定」タブで招待コードかGemini APIキーを設定すると、AIの下書き機能を使えます。いまは手動で選んでください。'}</div>
     </div></section>`}
   <form id="modelForm" class="sheet-${w.color}${ro ? ' ro' : ''}" onsubmit="return false">
@@ -995,8 +1003,9 @@ JSONのみ: {"sel":{"項目キー":["選択肢"]},"alt":{"項目キー":["選択
 function parseDraft(color, res) {
   const sel = {}, alt = {};
   ITEMS[color].forEach(it => {
-    const ok = TERMS(it);
-    const pick = o => [...new Set((o && Array.isArray(o[it.k]) ? o[it.k] : []).map(String).filter(t => ok.includes(t)))];
+    const ok = TERMS(it), nz = t => String(t).normalize('NFKC').replace(/[\s　・･]/g, '').replace(/[〜～~]/g, '〜').replace(/[「」"']/g, '');
+    const map = new Map(ok.map(t => [nz(t), t]));
+    const pick = o => [...new Set((o && Array.isArray(o[it.k]) ? o[it.k] : []).map(t => ok.includes(String(t)) ? String(t) : map.get(nz(t))).filter(Boolean))];
     let a1 = pick(res && res.sel); if (it.p === 1) a1 = a1.slice(0, 1);
     const a2 = pick(res && res.alt).filter(t => !a1.includes(t)).slice(0, 8);
     if (a1.length) sel[it.k] = a1;
@@ -1004,18 +1013,56 @@ function parseDraft(color, res) {
   });
   return { sel, alt };
 }
+/* ---------- Webで調べる（Gemini の Google 検索・URL読み取り） ---------- */
+function researchPrompt(w, url) {
+  return `あなたはワインの調査担当です。Google検索${url ? 'と、指定のURLのページ' : ''}を使って、次のワインについて調べてください。
+# ワイン
+銘柄: ${w.name || '不明'}
+生産者: ${w.producer || '不明'}
+生産国・産地: ${[w.country, w.region].filter(Boolean).join('、') || '不明'}
+品種: ${w.varieties || '不明'}
+収穫年: ${w.vintage || '不明'}
+${url ? '商品ページ等のURL: ' + url : ''}
+# 調べること
+1. テクニカル情報: 品種構成（比率）、畑・土壌、醸造（発酵容器、マロラクティック発酵、樽熟成の有無・期間・新樽率）、アルコール度数
+2. テイスティングコメント: 外観（色調・濃淡）、香り（果実・花・スパイス・樽・熟成香）、味わい（甘み・酸味・タンニン・ボディ・余韻）
+3. 生産者やこのキュヴェの特徴、このヴィンテージの作柄
+# ルール
+- 日本語で、見出し（■テクニカル ■テイスティング ■生産者・作柄）を付けて合計400〜700字にまとめる。
+- 検索で確認できた事実と推定を区別する。このヴィンテージの情報が見つからず、他のヴィンテージや産地一般の情報で補った部分は「（他ヴィンテージの情報）」「（産地一般の傾向）」と明記する。
+- 該当するワインが見つからなければ、最初の行に「該当するワインの情報は見つかりませんでした。」と書いたうえで、産地と品種の一般的な特徴をまとめる。`;
+}
+const srcLines = r => (r && r.sources && r.sources.length ? '\n出典: ' + r.sources.map(x => (x.title ? x.title + ' ' : '') + x.uri).join('\n　') : '');
+async function webResearch(w, url) {
+  const r = await S.sample.text(researchPrompt(w, url), { search: true, urls: !!url });
+  const t = String(r.text || '').trim();
+  if (!t) throw gErr('failed', 'empty');
+  return `【Webで調べた情報（Gemini・${new Date().toLocaleDateString('ja-JP')}）】\n${t}${srcLines(r)}`;
+}
+const hasWebRef = ref => /【Webで調べた情報/.test(String(ref || ''));
+async function draftWithRetry(w, ref) {
+  let last;
+  for (let i = 0; i < 2; i++) {
+    try { const res = await S.sample.json(draftPrompt(w, ref), { cache: false }); const pd = parseDraft(w.color, res); if (Object.keys(pd.sel).length) return { res, ...pd }; last = gErr('empty'); }
+    catch (e) { last = e; if (!['invalid_json', 'empty', 'failed', 'rate_limited'].includes(e && e.code)) break; await new Promise(r => setTimeout(r, 2500)); }
+  }
+  throw last;
+}
 async function autoDraft(id) {
   const w0 = wine(id); if (!S.sample || !w0 || !w0.mine) return;
   S.drafting[id] = true; if (!isForm()) render();
   try {
-    const res = await S.sample.json(draftPrompt(w0, w0.reference || ''), { cache: false });
-    const { sel, alt } = parseDraft(w0.color, res);
-    if (!Object.keys(sel).length) throw { code: 'empty' };
+    if (!hasWebRef(w0.reference)) {
+      try { const add = await webResearch(w0, w0.url || ''); const c0 = wine(id); if (c0) { c0.reference = [String(c0.reference || '').trim(), add].filter(Boolean).join('\n\n'); persistW(); } }
+      catch (e) { /* 検索できなくても、手元の情報で下書きを作る */ }
+    }
+    const wNow = wine(id) || w0;
+    const { res, sel, alt } = await draftWithRetry(wNow, wNow.reference || '');
     const cur = wine(id); if (!cur || hasModel(cur)) return;
     cur.model = { sel, alt, rationale: String((res && res.rationale) || ''), at: Date.now(), source: 'ai-auto' }; persistW();
     toast(`${cur.code} の模範解答をAIが下書きしました。ワインリストで確認できます。`);
   } catch (e) {
-    if (!(e && e.code === 'cancelled')) toast(`${w0.code} の模範解答を自動で作れませんでした。ワインリストの「模範解答」から作成してください。`);
+    if (!(e && e.code === 'cancelled')) toast(`${w0.code} の模範解答を自動で作れませんでした（${aiErrText(e).slice(0, 60)}）。ワインリストの「模範解答」から作成してください。`);
   } finally { delete S.drafting[id]; if (!isForm()) render(); }
 }
 const aiErr = (e, what) => { const c = e && e.code;
@@ -1033,7 +1080,7 @@ const FW_ACT = {
     const old = b.dataset.id ? wine(b.dataset.id) : null;
     const color = (document.querySelector('input[name="we-color"]:checked') || {}).value || 'w';
     const d = { name: val('#we-name'), producer: val('#we-producer'), country: val('#we-country'), region: val('#we-region'), varieties: val('#we-varieties'), vintage: val('#we-vintage'),
-      abv: val('#we-abv'), price: val('#we-price'), shop: val('#we-shop'), purchased: val('#we-purchased'), memo: val('#we-memo'), reference: val('#we-reference'), avail: !!($('#we-vial') && $('#we-vial').checked) };
+      abv: val('#we-abv'), price: val('#we-price'), shop: val('#we-shop'), purchased: val('#we-purchased'), memo: val('#we-memo'), reference: val('#we-reference'), url: val('#we-url'), avail: !!($('#we-vial') && $('#we-vial').checked) };
     const miss = [['name','銘柄'],['country','生産国'],['varieties','品種'],['vintage','収穫年']].filter(([k]) => !d[k]).map(([, l]) => l);
     if (miss.length) return toast(miss.join('、') + 'を入力してください。');
     if (old) {
@@ -1054,6 +1101,36 @@ const FW_ACT = {
     const n = S.answers.filter(a => a.wineId === w.id).length;
     if (!(await ask(`${w.code} を削除しますか？元に戻せません。${n ? `\nこのワインへの回答${n}件は残りますが、答え合わせは表示されなくなります。` : ''}`, '削除する'))) return;
     S.myWines = S.myWines.filter(x => x.id !== w.id); persistW(); S.dirty = false; go({ name: 'home' }, 'wines'); toast('削除しました。');
+  },
+  importUrl: async b => {
+    if (!S.sample) return;
+    const url = val('#imp-url').trim(), st = $('#url-status');
+    if (!/^https?:\/\/\S+\.\S+/.test(url)) return toast('https:// から始まるURLを貼り付けてください。');
+    const prompt = `次のURLのページを開いて、そこに載っているワインの情報を読み取ってください。ページを開けない、または情報が足りない場合は、Google検索で同じ商品を調べて補ってください。
+URL: ${url}
+# ルール
+- ページや検索結果に書かれていないことは推測せず空文字にする。
+- 国名・産地名・品種名・生産者名・銘柄は日本語のカタカナ表記にする（例: フランス、ブルゴーニュ、ソーヴィニヨン・ブラン）。日本語ページの表記があればそれに合わせる。
+- producer は生産者、name は生産者名を除いたワインの名前（キュヴェ名や原産地呼称名）。
+- region は「地方、地区・村名」のように広い順に読点区切り。varieties は主品種を先頭に読点「、」区切り。比率が書かれていれば多い順。
+- color は白なら "w"、赤なら "r"、判断できなければ空文字。vintage は4桁の年か "NV"。abv は数字だけ。price は税込の円の数字だけ。
+- notes には、テクニカル情報（品種比率、醸造、樽熟成）とテイスティングコメント（外観・香り・味わい）を日本語で400字以内に要約する。
+- page_opened は、URLのページ自体を読めたら true、検索で補っただけなら false。
+# 出力
+JSONだけを、前後に説明を付けずに出力: {"color":"","name":"","producer":"","country":"","region":"","varieties":"","vintage":"","abv":"","price":"","notes":"","page_opened":true}`;
+    b.disabled = true; st.textContent = 'AIがページを読み取っています。30秒〜1分ほどかかります。';
+    try {
+      const raw = await S.sample.text(prompt, { search: true, urls: true });
+      let r; { const s0 = String(raw.text).trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, ''); const a0 = s0.indexOf('{'), b0 = s0.lastIndexOf('}'); try { r = JSON.parse(a0 >= 0 ? s0.slice(a0, b0 + 1) : s0); } catch (e) { throw gErr('invalid_json'); } }
+      const done = [], L = { name: '銘柄', producer: '生産者', country: '生産国', region: '産地', varieties: '品種', vintage: '収穫年', abv: 'アルコール度数', price: '価格' };
+      Object.keys(L).forEach(k => { const e = $('#we-' + k); const v = r && r[k]; if (e && v !== undefined && v !== null && String(v).trim()) { e.value = String(v).trim(); e.classList.add('lblfilled'); done.push(L[k]); } });
+      if (r && (r.color === 'w' || r.color === 'r')) { const rb = $('#we-c' + r.color); if (rb) rb.checked = true; }
+      const ue = $('#we-url'); if (ue) ue.value = url;
+      const ref = $('#we-reference');
+      if (ref && r && r.notes) ref.value = [ref.value.trim(), `【商品ページの要約（${url}）】\n${r.notes}${srcLines(raw)}`].filter(Boolean).join('\n\n');
+      S.dirty = true;
+      st.textContent = (done.length ? `${done.join('・')}を入力欄に反映しました。` : '入力欄に反映できる情報が見つかりませんでした。') + (r && r.page_opened === false ? 'ページ自体は開けなかったため、Web検索の結果で補っています。' : '') + '内容を確認してから登録してください。' + (r && !r.color ? '白か赤かは読み取れなかったので、選んでください。' : '');
+    } catch (e) { st.textContent = aiErrText(e); } finally { b.disabled = false; }
   },
   importPage: async b => {
     if (!S.sample) return;
@@ -1084,12 +1161,24 @@ JSONのみ: {"color":"","name":"","producer":"","country":"","region":"","variet
       st.textContent = '読み取った内容を入力欄に反映しました。間違いがないか確認してから登録してください。' + (r && !r.color ? '白か赤かは読み取れなかったので、選んでください。' : '');
     } catch (e) { st.textContent = aiErr(e, '読み取れませんでした'); } finally { b.disabled = false; }
   },
+  webRef: async b => {
+    const w = wine(b.dataset.id); if (!w || !S.sample) return;
+    const st = $('#ai-status'), refEl = $('#m-ref'); b.disabled = true; st.textContent = 'Webでこのワインを調べています。30秒〜1分ほどかかります。';
+    try { const add = await webResearch(w, w.url || ''); refEl.value = [refEl.value.trim(), add].filter(Boolean).join('\n\n'); S.dirty = true; if ($('#m-web')) $('#m-web').checked = false; st.textContent = '調べた内容を参考情報に加えました。内容を確認して「AIで下書きを作る」を押してください。'; }
+    catch (e) { st.textContent = 'Webでは調べられませんでした。' + aiErrText(e); } finally { b.disabled = false; }
+  },
   aiDraft: async b => {
     const w = wine(b.dataset.id); if (!w || !S.sample) return;
-    const st = $('#ai-status'); b.disabled = true; st.textContent = 'AIが下書きを作っています。30秒から1分ほどかかります。';
+    const st = $('#ai-status'); b.disabled = true;
     try {
-      const res = await S.sample.json(draftPrompt(w, val('#m-ref')), { cache: false });
-      const { sel, alt } = parseDraft(w.color, res);
+      const refEl = $('#m-ref');
+      if ($('#m-web') && $('#m-web').checked) {
+        st.textContent = 'Webでこのワインを調べています。30秒〜1分ほどかかります。';
+        try { const add = await webResearch(w, w.url || ''); refEl.value = [refEl.value.trim(), add].filter(Boolean).join('\n\n'); $('#m-web').checked = false; }
+        catch (e) { st.textContent = 'Webでは調べられませんでした（' + aiErrText(e).slice(0, 50) + '）。手元の情報で下書きを作ります。'; await new Promise(r => setTimeout(r, 1200)); }
+      }
+      st.textContent = 'AIが下書きを作っています。30秒から1分ほどかかります。';
+      const { res, sel, alt } = await draftWithRetry(w, refEl.value);
       $('#m-sheet').innerHTML = modelSheetHTML(w.color, sel, alt);
       if (res && res.rationale) $('#m-rat').value = String(res.rationale);
       S.dirty = true; st.textContent = `下書きを反映しました（${Object.keys(sel).length}/${ITEMS[w.color].length}項目）。内容を確認・修正してから保存してください。`;
@@ -1994,7 +2083,11 @@ async function geminiCall(prompt, opts = {}) {
   const model = gGet(GMODEL).trim() || GDEF;
   const parts = [{ text: prompt }];
   for (const im of (opts.images || []).slice(0, 4)) parts.push({ inline_data: { mime_type: im.type || 'image/jpeg', data: await blobB64(im) } });
-  const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.4, ...(opts.json === false ? {} : { responseMimeType: 'application/json' }) } };
+  const tools = [];
+  if (opts.search) tools.push({ google_search: {} });
+  if (opts.urls) tools.push({ url_context: {} });
+  /* 検索・URL読み取りを使うときはJSONモードを併用できないので、文章で受け取ってJSON部分を取り出す */
+  const body = { contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.4, ...(opts.json === false || tools.length ? {} : { responseMimeType: 'application/json' }) }, ...(tools.length ? { tools } : {}) };
   const hasImg = parts.length > 1;
   let status, d = null;
   if (mode === 'relay') {
@@ -2016,6 +2109,11 @@ async function geminiCall(prompt, opts = {}) {
   const c = d && d.candidates && d.candidates[0];
   const text = c && c.content && (c.content.parts || []).map(x => x.text || '').join('');
   if (!text) throw gErr(c && c.finishReason === 'SAFETY' ? 'image_rejected' : 'failed', 'empty');
+  if (opts.meta) {
+    const gm = c.groundingMetadata || c.grounding_metadata || {}, seen = new Set();
+    const sources = (gm.groundingChunks || gm.grounding_chunks || []).map(x => x.web || {}).filter(x => x.uri && !seen.has(x.uri) && seen.add(x.uri)).map(x => ({ title: x.title || '', uri: x.uri })).slice(0, 8);
+    return { text, sources, queries: gm.webSearchQueries || gm.web_search_queries || [] };
+  }
   return text;
 }
 const geminiSample = {
@@ -2027,6 +2125,7 @@ const geminiSample = {
     if (a0 >= 0 && b0 > a0) { try { return JSON.parse(s0.slice(a0, b0 + 1)); } catch (e) {} }
     throw gErr('invalid_json');
   },
+  async text(prompt, opts = {}) { return geminiCall(prompt, { ...opts, json: false, meta: true }); },
   async limits() { return { images: { mediaTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'], maxCount: 4 } }; }
 };
 function aiApply() {
@@ -2064,7 +2163,7 @@ function viewAI() {
     <li>招待コードは本人専用です。他の人に転送しないでください。主催者は合言葉を消すことで、いつでも利用を止められます。</li>
     <li>主催者のAIは無料枠を全員で分け合っています。同時にたくさん使うと「利用が集中しています」と出ることがあるので、少し時間をおいて試してください。</li>
     <li>無料枠では、送った写真や文章がGoogleのサービス改善に使われる場合があります。ラベルの写真や商品ページの本文以外は送らないでください。</li>
-    <li>AIはインターネットを検索するわけではありません。読み取り結果や模範解答の下書きは、必ず確認してから保存してください。</li>
+    <li>模範解答の下書きとURLからの読み取りでは、AIがGoogle検索やページの読み取りを使います。検索結果が別のヴィンテージや似た銘柄のこともあるので、読み取り結果や下書きは必ず確認してから保存してください。</li>
   </ul></section></div>`;
 }
 async function aiTestRun(id) {
