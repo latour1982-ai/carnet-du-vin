@@ -905,6 +905,11 @@ function viewWineEdit(v) {
       <label class="full"><span>参考情報（模範解答のAI下書きに使われます）</span><textarea id="we-reference">${h(d.reference || '')}</textarea></label>
     </div>
   </form>
+  ${w && w.mine ? `<section class="sec redo"><h3>情報を追加して模範解答を更新する</h3><div style="padding:8px 0 16px">
+    <p class="hint">商品ページのURLや参考情報を上の欄に追加し、調べてほしいことや気になる点があれば下に書いてから押してください。変更内容を保存したうえで、AIがWebで調べ直し、模範解答を作り直します（1〜2分）。${S.sample ? '' : '<br>使うには「設定」タブでAIを設定してください。'}</p>
+    <textarea id="we-ask" placeholder="例: このURLのテクニカルシートで品種比率と樽熟成を確認して／新樽率が高いので樽の香りを反映して" style="min-height:80px"></textarea>
+    <div style="margin-top:10px"><button class="btn ghost" data-act="saveWine" data-id="${w.id}" data-redo="web"${S.sample ? '' : ' disabled'}>保存してWebで調べて作り直す</button></div>
+  </div></section>` : ''}
   <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between">
     <button class="btn" data-act="saveWine" data-id="${w ? w.id : ''}" data-link="${h(v.linkAnswer || '')}">${w ? '変更を保存' : '登録してコードを発行'}</button>
     ${w ? `<button class="btn danger" data-act="delWine" data-id="${w.id}">このワインを削除</button>` : ''}
@@ -1028,7 +1033,7 @@ function parseDraft(color, res) {
   return { sel, alt };
 }
 /* ---------- Webで調べる（Gemini の Google 検索・URL読み取り） ---------- */
-function researchPrompt(w, url) {
+function researchPrompt(w, url, note) {
   return `あなたはワインの調査担当です。Google検索${url ? 'と、指定のURLのページ' : ''}を使って、次のワインについて調べてください。
 # ワイン
 銘柄: ${w.name || '不明'}
@@ -1037,7 +1042,7 @@ function researchPrompt(w, url) {
 品種: ${w.varieties || '不明'}
 収穫年: ${w.vintage || '不明'}
 ${url ? '商品ページ等のURL: ' + url : ''}
-# 調べること
+${note ? '# 利用者からの依頼（優先して調べる）\n' + note + '\n' : ''}# 調べること
 1. テクニカル情報: 品種構成（比率）、畑・土壌、醸造（発酵容器、マロラクティック発酵、樽熟成の有無・期間・新樽率）、アルコール度数
 2. テイスティングコメント: 外観（色調・濃淡）、香り（果実・花・スパイス・樽・熟成香）、味わい（甘み・酸味・タンニン・ボディ・余韻）
 3. 生産者やこのキュヴェの特徴、このヴィンテージの作柄
@@ -1047,8 +1052,8 @@ ${url ? '商品ページ等のURL: ' + url : ''}
 - 該当するワインが見つからなければ、最初の行に「該当するワインの情報は見つかりませんでした。」と書いたうえで、産地と品種の一般的な特徴をまとめる。`;
 }
 const srcLines = r => (r && r.sources && r.sources.length ? '\n出典: ' + r.sources.map(x => (x.title ? x.title + ' ' : '') + x.uri).join('\n　') : '');
-async function webResearch(w, url) {
-  const r = await S.sample.text(researchPrompt(w, url), { search: true, urls: !!url });
+async function webResearch(w, url, note) {
+  const r = await S.sample.text(researchPrompt(w, url, note), { search: true, urls: !!url });
   const t = String(r.text || '').trim();
   if (!t) throw gErr('failed', 'empty');
   return `【Webで調べた情報（Gemini・${new Date().toLocaleDateString('ja-JP')}）】\n${t}${srcLines(r)}`;
@@ -1062,19 +1067,19 @@ async function draftWithRetry(w, ref) {
   }
   throw last;
 }
-async function autoDraft(id) {
+async function autoDraft(id, force, note) {
   const w0 = wine(id); if (!S.sample || !w0 || !w0.mine) return;
   S.drafting[id] = true; if (!isForm()) render();
   try {
-    if (!hasWebRef(w0.reference)) {
-      try { const add = await webResearch(w0, w0.url || ''); const c0 = wine(id); if (c0) { c0.reference = [String(c0.reference || '').trim(), add].filter(Boolean).join('\n\n'); persistW(); } }
+    if (force || !hasWebRef(w0.reference)) {
+      try { const add = await webResearch(w0, w0.url || '', note || ''); const c0 = wine(id); if (c0) { c0.reference = [String(c0.reference || '').trim(), add].filter(Boolean).join('\n\n'); persistW(); } }
       catch (e) { /* 検索できなくても、手元の情報で下書きを作る */ }
     }
     const wNow = wine(id) || w0;
-    const { res, sel, alt } = await draftWithRetry(wNow, wNow.reference || '');
-    const cur = wine(id); if (!cur || hasModel(cur)) return;
+    const { res, sel, alt } = await draftWithRetry(wNow, [wNow.reference || '', note ? '【利用者からの依頼】' + note : ''].filter(Boolean).join('\n\n'));
+    const cur = wine(id); if (!cur || (hasModel(cur) && !force)) return;
     cur.model = { sel, alt, rationale: String((res && res.rationale) || ''), at: Date.now(), source: 'ai-auto' }; persistW();
-    toast(`${cur.code} の模範解答をAIが下書きしました。ワインリストで確認できます。`);
+    toast(`${cur.code} の模範解答をAIが${force ? 'Webで調べて作り直し' : '下書き'}ました。ワインリストで確認できます。`);
   } catch (e) {
     if (!(e && e.code === 'cancelled')) toast(`${w0.code} の模範解答を自動で作れませんでした（${aiErrText(e).slice(0, 60)}）。ワインリストの「模範解答」から作成してください。`);
   } finally { delete S.drafting[id]; if (!isForm()) render(); }
@@ -1100,7 +1105,10 @@ const FW_ACT = {
     if (old) {
       let codeChanged = false;
       if (old.color !== color) { old.code = newCode(color); old.model = null; codeChanged = true; }
+      const redo = b.dataset.redo, note = val('#we-ask');
+      if (redo && hasModel(old) && old.model.source !== 'ai-auto' && !(await ask('この模範解答は確認済みです。Webで調べ直した下書きで上書きしますか？', 'はい'))) return;
       Object.assign(old, d, { color }); persistW(); S.dirty = false; go({ name: 'home' }, 'wines');
+      if (redo && !codeChanged) { toast(`${old.code} をWebで調べて模範解答を作り直しています（1〜2分）…`); autoDraft(old.id, true, note); return; }
       toast(codeChanged ? `色を変えたため、コードが ${old.code} に変わりました。ラベルを書き直してください。` : '変更を保存しました。');
       return;
     }
@@ -1883,6 +1891,7 @@ function viewHelp() {
         </ul></li>
       <li><b>模範解答の自動作成</b>：登録すると、AIが銘柄・生産者・収穫年でWeb検索して情報を集め、それをもとに模範解答の下書きを作ります（1〜2分）。一覧で「AI下書き（未確認）」となっているものは、「模範解答」で確認・修正して保存できます。</li>
       <li>模範解答の画面では、用語をタップするたびに「正解」→「別解」→「解除」と切り替わります。うまく作れなかったときは、「先にWebで調べて参考情報に加える」にチェックを入れて「AIで下書きを作る」を押してください。</li>
+      <li><b>情報を追加して更新</b>：自分のワインの「編集」画面の下にある「情報を追加して模範解答を更新する」に、調べてほしいことを書いて「保存してWebで調べて作り直す」を押すと、追加したURLや参考情報も使って模範解答を作り直します。</li>
       <li>共有のワインと出題で届いたワインは閲覧のみです。自分のワインは、在庫の切り替え、編集、削除ができます。</li>
     </ul>
   </section>
