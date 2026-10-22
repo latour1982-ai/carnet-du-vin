@@ -1,0 +1,14 @@
+{
+  "name": "Carnet du Vin（テイスティング練習帳）",
+  "short_name": "Carnet du Vin",
+  "description": "葡萄酒探究会のブラインドテイスティング練習帳",
+  "lang": "ja",
+  "display": "standalone",
+  "background_color": "#17151A",
+  "theme_color": "#0D0C0B",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
